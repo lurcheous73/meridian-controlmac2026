@@ -2,6 +2,7 @@
 // Does not register an import device, create a project or upload music.
 using System;
 using System.Threading;
+using System.Net.NetworkInformation;
 using Sooloos.Broker;
 
 internal static class BrokerProbe
@@ -13,6 +14,18 @@ internal static class BrokerProbe
             return 2;
         }
         SynchronizationContext.SetSynchronizationContext(new SynchronizationContext());
+        // The shipping Mac client uses en0's MAC, via an obsolete i386 helper.
+        // Supply the same real identity through the in-memory property API.
+        string serial = null;
+        foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+            if (nic.Name == "en0") serial = nic.GetPhysicalAddress().ToString();
+        if (serial == null || serial.Length != 12 || serial == "000000000000") {
+            Console.Error.WriteLine("Cannot read en0's real network identity.");
+            return 1;
+        }
+        Sooloos.SooloosProperty.CommandLine = new string[] { "--serialnumber=" + serial };
+        Sooloos.Debug.ForceRealSerialNumber = false;
+        Sooloos.Debug.Model = "ControlMac";
         var done = new ManualResetEvent(false);
         var connection = new Connection(args[0]);
         int sent = 0;

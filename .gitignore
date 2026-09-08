@@ -21,3 +21,7 @@ __pycache__/
 .venv/
 .env
 .env.*
+node_modules/
+*.bak
+tools/atracdenc-src/
+build/

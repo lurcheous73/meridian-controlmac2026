@@ -3,29 +3,44 @@
 using System;
 using System.Threading;
 using System.Net.NetworkInformation;
+using System.Collections.Concurrent;
 using Sooloos.Broker;
 
 internal static class BrokerProbe
 {
-    public static int Main(string[] args)
-    {
-        if (args.Length != 1) {
-            Console.Error.WriteLine("Usage: BrokerProbe CORE_HOST");
-            return 2;
+    sealed class OrderedContext : SynchronizationContext {
+        readonly BlockingCollection<Action> queue = new BlockingCollection<Action>();
+        public OrderedContext() {
+            var thread = new Thread(delegate() { foreach (var work in queue.GetConsumingEnumerable()) work(); });
+            thread.IsBackground = true;
+            thread.Start();
         }
-        SynchronizationContext.SetSynchronizationContext(new SynchronizationContext());
+        public override void Post(SendOrPostCallback callback, object state) { queue.Add(delegate { callback(state); }); }
+    }
+    public static void Initialize()
+    {
+        // Original callbacks run on one UI thread; preserve their ordering.
+        SynchronizationContext.SetSynchronizationContext(new OrderedContext());
         // The shipping Mac client uses en0's MAC, via an obsolete i386 helper.
         // Supply the same real identity through the in-memory property API.
         string serial = null;
         foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
             if (nic.Name == "en0") serial = nic.GetPhysicalAddress().ToString();
         if (serial == null || serial.Length != 12 || serial == "000000000000") {
-            Console.Error.WriteLine("Cannot read en0's real network identity.");
-            return 1;
+            throw new InvalidOperationException("Cannot read en0's real network identity.");
         }
         Sooloos.SooloosProperty.CommandLine = new string[] { "--serialnumber=" + serial };
         Sooloos.Debug.ForceRealSerialNumber = false;
         Sooloos.Debug.Model = "ControlMac";
+    }
+
+    public static int Main(string[] args)
+    {
+        if (args.Length != 1) {
+            Console.Error.WriteLine("Usage: BrokerProbe CORE_HOST");
+            return 2;
+        }
+        Initialize();
         var done = new ManualResetEvent(false);
         var connection = new Connection(args[0]);
         int sent = 0;
@@ -36,7 +51,7 @@ internal static class BrokerProbe
                 return;
             connection.Message.SendRequest(new Sooloos.Msg.SystemInfo.GetBrokerInfoRequest(), delegate(IMessage message, bool final) {
                 Console.WriteLine("Response: " + message.GetType().FullName + "; final=" + final);
-                if (final) { result = 0; done.Set(); }
+                if (final) { result = message is Sooloos.Msg.SystemInfo.BrokerInfo ? 0 : 1; done.Set(); }
             });
         };
         try {

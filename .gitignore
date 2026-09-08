@@ -1,0 +1,23 @@
+# Owner-supplied Meridian software and all generated output stay private.
+/work/
+/vendor/
+/downloads/
+/build/
+/dist/
+/reports/
+*.dmg
+*.tar
+*.tar.gz
+*.zip
+*.exe
+*.dll
+*.dylib
+*.app/
+*.il
+*.log
+__pycache__/
+*.py[cod]
+.DS_Store
+.venv/
+.env
+.env.*

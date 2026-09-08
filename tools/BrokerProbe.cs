@@ -1,0 +1,39 @@
+// Read-only connectivity probe using locally recovered vendor assemblies.
+// Does not register an import device, create a project or upload music.
+using System;
+using System.Threading;
+using Sooloos.Broker;
+
+internal static class BrokerProbe
+{
+    public static int Main(string[] args)
+    {
+        if (args.Length != 1) {
+            Console.Error.WriteLine("Usage: BrokerProbe CORE_HOST");
+            return 2;
+        }
+        SynchronizationContext.SetSynchronizationContext(new SynchronizationContext());
+        var done = new ManualResetEvent(false);
+        var connection = new Connection(args[0]);
+        int sent = 0;
+        int result = 1;
+        connection.ConnectionStatusChanged += delegate(IConnection c, ConnectionStatus status) {
+            Console.WriteLine("Connection: " + status);
+            if (status.ToString() != "Connected" || Interlocked.Exchange(ref sent, 1) != 0)
+                return;
+            connection.Message.SendRequest(new Sooloos.Msg.SystemInfo.GetBrokerInfoRequest(), delegate(IMessage message, bool final) {
+                Console.WriteLine("Response: " + message.GetType().FullName + "; final=" + final);
+                if (final) { result = 0; done.Set(); }
+            });
+        };
+        try {
+            connection.Connect();
+            if (!done.WaitOne(20000)) Console.Error.WriteLine("Timed out waiting for broker info.");
+        } catch (Exception error) {
+            Console.Error.WriteLine(error);
+        } finally {
+            connection.Disconnect();
+        }
+        return result;
+    }
+}

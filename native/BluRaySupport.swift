@@ -157,14 +157,14 @@ enum MakeMKVBridge {
         }.sorted { $0.index < $1.index }
     }
 
-    static func scanDisc() throws -> [BluRayTitleInfo] {
+    static func scanSource(_ source: String) throws -> [BluRayTitleInfo] {
         guard let exe = executableURL() else {
             throw NSError(domain: "ControlMac.MakeMKV", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "MakeMKV is not installed. Protected Blu-ray discs require MakeMKV access."])
         }
         let p = Process()
         p.executableURL = exe
-        p.arguments = ["--robot", "--cache=128", "--messages=-stdout", "info", "disc:0"]
+        p.arguments = ["--robot", "--cache=128", "--messages=-stdout", "info", source]
         let pipe = Pipe()
         p.standardOutput = pipe
         p.standardError = pipe
@@ -179,4 +179,8 @@ enum MakeMKVBridge {
         }
         return parseInfo(text)
     }
+
+    static func scanDisc() throws -> [BluRayTitleInfo] { try scanSource("disc:0") }
+    static func scanISO(_ image: URL) throws -> [BluRayTitleInfo] { try scanSource("iso:" + image.path) }
+    static func scanFolder(_ folder: URL) throws -> [BluRayTitleInfo] { try scanSource("file:" + folder.path) }
 }

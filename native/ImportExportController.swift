@@ -69,13 +69,14 @@ final class ImportExportController: NSObject, NSTableViewDataSource, NSTableView
 
         let addFolders = NSButton(title: "Add Folders…", target: self, action: #selector(addFoldersAction))
         let addFiles = NSButton(title: "Add Files…", target: self, action: #selector(addFilesAction))
-        let addISO = NSButton(title: "Add ISO…", target: self, action: #selector(addISOAction))
+        let addISO = NSButton(title: "Add ISO / BIN…", target: self, action: #selector(addISOAction))
         let optical = NSButton(title: "CD / DVD / Blu-ray…", target: self, action: #selector(scanOpticalAction))
+        let discBackup = NSButton(title: "Backup Disc → ISO…", target: self, action: #selector(backupOpticalDiscAction))
         let miniDisc = NSButton(title: "MiniDisc…", target: self, action: #selector(scanMiniDiscAction))
         miniDiscRipButton.target = self; miniDiscRipButton.action = #selector(ripMiniDiscAction); miniDiscRipButton.isEnabled = false
         miniDiscWipeButton.target = self; miniDiscWipeButton.action = #selector(wipeMiniDiscAction); miniDiscWipeButton.isEnabled = true
         let clear = NSButton(title: "Clear", target: self, action: #selector(clearAction))
-        let buttons = NSStackView(views: [addFolders, addFiles, addISO, optical, miniDisc, miniDiscRipButton, miniDiscWipeButton, clear])
+        let buttons = NSStackView(views: [addFolders, addFiles, addISO, optical, discBackup, miniDisc, miniDiscRipButton, miniDiscWipeButton, clear])
         buttons.orientation = .horizontal; buttons.spacing = 8
 
         table.headerView = NSTableHeaderView()
@@ -294,11 +295,11 @@ final class ImportExportController: NSObject, NSTableViewDataSource, NSTableView
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false; panel.canChooseFiles = true
         panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = [UTType(filenameExtension: "iso")!]
-        panel.message = "Choose one or more ISO images. Mountable filesystems will be scanned read-only."
+        panel.allowedContentTypes = [UTType(filenameExtension: "iso")!, UTType(filenameExtension: "bin")!]
+        panel.message = "Choose ISO or BIN disc images. Images are mounted read-only and scanned using the same optical-media path."
         panel.begin { response in
             guard response == .OK else { return }
-            self.stageISOImages(panel.urls)
+            self.stageDiscImages(panel.urls)
         }
     }
 
@@ -308,65 +309,203 @@ final class ImportExportController: NSObject, NSTableViewDataSource, NSTableView
             stageAudioCD(audioCD)
         } else if let bluRay = roots.first(where: { FileManager.default.fileExists(atPath: $0.appendingPathComponent("BDMV/index.bdmv").path) }) {
             stageBluRay(bluRay)
+        } else if let dvd = roots.first(where: { FileManager.default.fileExists(atPath: $0.appendingPathComponent("VIDEO_TS/VIDEO_TS.IFO").path) }) {
+            stageDVD(dvd)
         } else {
             status.stringValue = "Scanning mounted optical media…"
             scanMountedVolumes(preferOptical: true)
         }
     }
 
-    private func stageBluRay(_ volume: URL) {
-        guard !scanning, !operationBusy else { return }
-        scanning = true
-        status.stringValue = "Scanning Blu-ray audio with MakeMKV…"
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                let titles = try MakeMKVBridge.scanDisc()
-                var staged: [ImportStageRow] = []
-                for title in titles where !title.audio.isEmpty {
-                    let stereo = BluRayAudioPolicy.preferredStereo(in: title)
-                    let multichannel = BluRayAudioPolicy.preferredMultichannelByLayout(in: title)
-                    let archiveKeys = Set(multichannel.map { "\($0.titleIndex):\($0.streamIndex)" })
-                    for stream in title.audio {
-                        let pseudo = URL(string: "bluray://disc/title/\(title.index)/audio/\(stream.streamIndex)")!
-                        let source = title.source.isEmpty ? "Title \(title.index)" : title.source
-                        let duration = title.duration.isEmpty ? "" : " · \(title.duration)"
-                        let layout: String
-                        if !stream.layoutName.isEmpty { layout = stream.layoutName }
-                        else if stream.isStereo { layout = "Stereo" }
-                        else if stream.channels > 0 { layout = "\(stream.channels)ch" }
-                        else { layout = "Audio" }
-                        let codec = stream.codecLong.isEmpty ? stream.codec : stream.codecLong
-                        let key = "\(stream.titleIndex):\(stream.streamIndex)"
-                        let recommendation: String
-                        if let selected = stereo, selected.streamIndex == stream.streamIndex {
-                            recommendation = "Blu-ray · Default stereo → Sooloos"
-                        } else if archiveKeys.contains(key) {
-                            recommendation = "Blu-ray · Archive \(stream.normalizedLayout) locally"
-                        } else {
-                            recommendation = "Blu-ray · Alternate stream · not selected by default"
-                        }
-                        staged.append(ImportStageRow(
-                            url: pseudo, artist: "", album: volume.lastPathComponent,
-                            title: "\(source)\(duration) · \(layout)", disc: 1, track: title.index + 1,
-                            codec: codec, rate: stream.sampleRate, bits: stream.bits,
-                            channels: stream.channels,
-                            status: recommendation))
+    private func opticalTitleRows(volume: URL, titles: [BluRayTitleInfo], mediaLabel: String) -> [ImportStageRow] {
+        var staged: [ImportStageRow] = []
+        for title in titles where !title.audio.isEmpty {
+            let stereo = BluRayAudioPolicy.preferredStereo(in: title)
+            let multichannel = BluRayAudioPolicy.preferredMultichannelByLayout(in: title)
+            let archiveKeys = Set(multichannel.map { "\($0.titleIndex):\($0.streamIndex)" })
+            for stream in title.audio {
+                let scheme = mediaLabel.lowercased() == "dvd" ? "dvd" : "bluray"
+                let pseudo = URL(string: "\(scheme)://disc/title/\(title.index)/audio/\(stream.streamIndex)")!
+                let source = title.source.isEmpty ? "Title \(title.index)" : title.source
+                let duration = title.duration.isEmpty ? "" : " · \(title.duration)"
+                let layout = !stream.layoutName.isEmpty ? stream.layoutName : (stream.isStereo ? "Stereo" : (stream.channels > 0 ? "\(stream.channels)ch" : "Audio"))
+                let codec = stream.codecLong.isEmpty ? stream.codec : stream.codecLong
+                let key = "\(stream.titleIndex):\(stream.streamIndex)"
+                let recommendation: String
+                if let selected = stereo, selected.streamIndex == stream.streamIndex { recommendation = "\(mediaLabel) · Default stereo → Sooloos" }
+                else if archiveKeys.contains(key) { recommendation = "\(mediaLabel) · Archive \(stream.normalizedLayout) locally" }
+                else { recommendation = "\(mediaLabel) · Alternate stream · not selected by default" }
+                staged.append(ImportStageRow(url: pseudo, artist: "", album: volume.lastPathComponent,
+                    title: "\(source)\(duration) · \(layout)", disc: 1, track: title.index + 1,
+                    codec: codec, rate: stream.sampleRate, bits: stream.bits, channels: stream.channels, status: recommendation))
+            }
+        }
+        return staged
+    }
+
+    @objc private func backupOpticalDiscAction() {
+        guard !operationBusy, !scanning else { return }
+        guard let device = DiscImageSupport.opticalDevice(), let root = DiscImageSupport.mountedPoint(for: device) else {
+            let a = NSAlert(); a.alertStyle = .warning; a.messageText = "No mounted optical disc"; a.informativeText = "Insert and mount the DVD or Blu-ray before creating an ISO backup."
+            if let parent = NSApp.keyWindow ?? NSApp.mainWindow { a.beginSheetModal(for: parent) } else { a.runModal() }; return
+        }
+        let isBluRay = FileManager.default.fileExists(atPath: root.appendingPathComponent("BDMV/index.bdmv").path)
+        let protectedBluRay = isBluRay && FileManager.default.fileExists(atPath: root.appendingPathComponent("AACS").path)
+        if protectedBluRay, MakeMKVBridge.executableURL() != nil {
+            let a = NSAlert(); a.messageText = "How should this Blu-ray be backed up?"
+            a.informativeText = "Playable ISO uses MakeMKV's established full-disc decrypting backup and keeps the BDMV structure. Exact Raw ISO copies disc sectors unchanged and therefore keeps the original protection."
+            a.addButton(withTitle: "Playable ISO"); a.addButton(withTitle: "Exact Raw ISO"); a.addButton(withTitle: "Cancel")
+            let handle: (NSApplication.ModalResponse) -> Void = { response in
+                if response == .alertFirstButtonReturn { self.chooseDiscBackupDestination(root: root, device: device, playable: true) }
+                else if response == .alertSecondButtonReturn { self.chooseDiscBackupDestination(root: root, device: device, playable: false) }
+            }
+            if let parent = NSApp.keyWindow ?? NSApp.mainWindow { a.beginSheetModal(for: parent, completionHandler: handle) } else { handle(a.runModal()) }
+        } else { chooseDiscBackupDestination(root: root, device: device, playable: false) }
+    }
+
+    private func chooseDiscBackupDestination(root: URL, device: String, playable: Bool) {
+        let panel = NSSavePanel(); panel.allowedContentTypes = [UTType(filenameExtension: "iso")!]
+        panel.canCreateDirectories = true; panel.nameFieldStringValue = root.lastPathComponent.replacingOccurrences(of: "/", with: "-") + ".iso"
+        panel.message = playable ? "Save a playable full-disc Blu-ray structure backup as ISO." : "Save an exact raw optical-disc backup as ISO."
+        panel.begin { response in
+            guard response == .OK, let output = panel.url else { return }
+            if playable { self.startPlayableBluRayBackup(root: root, output: output) }
+            else { self.startRawDiscBackup(device: device, output: output) }
+        }
+    }
+
+    private func startRawDiscBackup(device: String, output: URL) {
+        try? FileManager.default.removeItem(at: output)
+        let expected = DiscImageSupport.deviceSize(device)
+        let sourceRoot = DiscImageSupport.mountedPoint(for: device)
+        let expectedStructure: String?
+        if let root = sourceRoot, FileManager.default.fileExists(atPath: root.appendingPathComponent("BDMV/index.bdmv").path) { expectedStructure = "BDMV/index.bdmv" }
+        else if let root = sourceRoot, FileManager.default.fileExists(atPath: root.appendingPathComponent("VIDEO_TS/VIDEO_TS.IFO").path) { expectedStructure = "VIDEO_TS/VIDEO_TS.IFO" }
+        else if let root = sourceRoot, FileManager.default.fileExists(atPath: root.appendingPathComponent("AUDIO_TS").path) { expectedStructure = "AUDIO_TS" }
+        else { expectedStructure = nil }
+        let p = DiscImageSupport.rawCopyProcess(blockDevice: device, output: output)
+        let pipe = Pipe(); p.standardError = pipe; p.standardOutput = pipe
+        cancelRequested = false; operationBusy = true; localOperationKind = "disc-backup"; activeMediaProcess = p
+        setOperationState("Creating raw optical-disc ISO…", busy: true)
+        do { try p.run() } catch {
+            activeMediaProcess = nil; localOperationKind = nil; operationBusy = false
+            setOperationState("Disc backup could not start", busy: false); return
+        }
+        DispatchQueue.global(qos: .utility).async {
+            while p.isRunning {
+                Thread.sleep(forTimeInterval: 0.5)
+                if let expected = expected, expected > 0,
+                   let attrs = try? FileManager.default.attributesOfItem(atPath: output.path),
+                   let size = attrs[.size] as? NSNumber {
+                    let current = size.int64Value; let fraction = min(1.0, Double(current) / Double(expected))
+                    DispatchQueue.main.async {
+                        self.importProgress.isHidden = false; self.importProgressLabel.isHidden = false
+                        self.importProgress.doubleValue = fraction * 100
+                        self.importProgressLabel.stringValue = String(format: "Optical ISO backup · %.1f%% · %.2f / %.2f GB", fraction * 100, Double(current)/1_000_000_000.0, Double(expected)/1_000_000_000.0)
                     }
                 }
+            }
+            let log = pipe.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
+            let attrs = try? FileManager.default.attributesOfItem(atPath: output.path)
+            let actual = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
+            let cancelled = self.cancelRequested || p.terminationStatus != 0
+            if cancelled { try? FileManager.default.removeItem(at: output) }
+            DispatchQueue.main.async {
+                self.activeMediaProcess = nil; self.localOperationKind = nil; self.operationBusy = false
+                if cancelled { self.setOperationState("Disc backup cancelled · partial ISO removed", busy: false); return }
+                if let expected = expected, expected != actual {
+                    try? FileManager.default.removeItem(at: output); self.setOperationState("Disc backup failed verification", busy: false)
+                    let text = String(data: log, encoding: .utf8) ?? ""
+                    let a = NSAlert(); a.alertStyle = .warning; a.messageText = "ISO size verification failed"; a.informativeText = "Expected \(expected) bytes but wrote \(actual).\n\n\(text)"
+                    if let parent = NSApp.keyWindow ?? NSApp.mainWindow { a.beginSheetModal(for: parent) }; return
+                }
+                self.verifyDiscBackupISO(output, expectedStructure: expectedStructure)
+            }
+        }
+    }
+
+    private func startPlayableBluRayBackup(root: URL, output: URL) {
+        guard let makeMKV = MakeMKVBridge.executableURL() else { status.stringValue = "MakeMKV is required for a playable protected Blu-ray backup"; return }
+        let work = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!.appendingPathComponent("ControlMac2026/Disc Backups/" + UUID().uuidString, isDirectory: true)
+        let structure = work.appendingPathComponent("structure", isDirectory: true); try? FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: output)
+        let p = Process(); p.executableURL = makeMKV; p.arguments = ["backup", "--decrypt", "--cache=128", "--noscan", "-r", "--progress=-same", "disc:0", structure.path]
+        let pipe = Pipe(); p.standardOutput = pipe; p.standardError = pipe
+        cancelRequested = false; operationBusy = true; localOperationKind = "disc-backup"; activeMediaProcess = p
+        setOperationState("Creating playable Blu-ray structure backup…", busy: true)
+        do { try p.run() } catch {
+            activeMediaProcess = nil; localOperationKind = nil; operationBusy = false; try? FileManager.default.removeItem(at: work)
+            setOperationState("Blu-ray backup could not start", busy: false); return
+        }
+        DispatchQueue.global(qos: .utility).async {
+            _ = pipe.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit(); self.activeMediaProcess = nil
+            guard p.terminationStatus == 0, !self.cancelRequested, FileManager.default.fileExists(atPath: structure.appendingPathComponent("BDMV/index.bdmv").path) else {
+                try? FileManager.default.removeItem(at: output); try? FileManager.default.removeItem(at: work)
+                DispatchQueue.main.async { self.localOperationKind = nil; self.operationBusy = false; self.setOperationState("Blu-ray backup stopped safely", busy: false) }; return
+            }
+            DispatchQueue.main.async { self.setOperationState("Building UDF 2.50 ISO…", busy: true) }
+            do { try DiscImageSupport.createUDF250ISO(from: structure, to: output, volumeName: root.lastPathComponent) } catch {
+                try? FileManager.default.removeItem(at: output); try? FileManager.default.removeItem(at: work)
+                DispatchQueue.main.async { self.localOperationKind = nil; self.operationBusy = false; self.setOperationState("Blu-ray ISO creation failed", busy: false) }; return
+            }
+            try? FileManager.default.removeItem(at: work)
+            DispatchQueue.main.async { self.localOperationKind = nil; self.operationBusy = false; self.verifyDiscBackupISO(output, expectedStructure: "BDMV/index.bdmv") }
+        }
+    }
+
+    private func verifyDiscBackupISO(_ output: URL, expectedStructure: String?) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let mounted = try DiscImageSupport.mountReadOnly(output); defer { DiscImageSupport.detach(mounted.devices) }
+                guard let mount = mounted.mounts.first else { throw NSError(domain: "ControlMac.DiscImage", code: 9, userInfo: [NSLocalizedDescriptionKey: "ISO remounted without a filesystem."]) }
+                if let expectedStructure = expectedStructure, !FileManager.default.fileExists(atPath: mount.appendingPathComponent(expectedStructure).path) {
+                    throw NSError(domain: "ControlMac.DiscImage", code: 10, userInfo: [NSLocalizedDescriptionKey: "Expected disc structure is missing from the ISO."])
+                }
+                DispatchQueue.main.async { self.setOperationState("Disc ISO backup complete · \(output.path)", busy: false); self.status.stringValue = "Verified ISO backup · \(output.lastPathComponent)" }
+            } catch {
+                DispatchQueue.main.async { self.setOperationState("ISO created but remount verification failed", busy: false); self.status.stringValue = error.localizedDescription }
+            }
+        }
+    }
+
+    private func stageBluRay(_ volume: URL, source: String = "disc:0") {
+        guard !scanning, !operationBusy else { return }
+        scanning = true; status.stringValue = "Scanning Blu-ray audio with MakeMKV…"
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let titles = try MakeMKVBridge.scanSource(source)
+                let staged = self.opticalTitleRows(volume: volume, titles: titles, mediaLabel: "Blu-ray")
                 DispatchQueue.main.async {
                     self.rows.removeAll { $0.url.scheme?.lowercased() == "bluray" }
-                    self.rows.append(contentsOf: staged)
-                    self.sortRows(); self.table.reloadData(); self.scanning = false
-                    self.updateStatus()
-                    self.status.stringValue = "Blu-ray scanned · \(titles.count) title(s) · \(staged.count) audio stream(s) · review programme before ripping"
+                    self.rows.append(contentsOf: staged); self.sortRows(); self.table.reloadData(); self.scanning = false
+                    self.updateStatus(); self.status.stringValue = "Blu-ray scanned · \(titles.count) title(s) · \(staged.count) audio stream(s) · review programme before ripping"
                 }
             } catch {
                 DispatchQueue.main.async {
-                    self.scanning = false; self.updateStatus()
-                    self.status.stringValue = "Blu-ray scan failed"
-                    let a = NSAlert(); a.alertStyle = .warning
-                    a.messageText = "Blu-ray could not be scanned"
-                    a.informativeText = error.localizedDescription
+                    self.scanning = false; self.updateStatus(); self.status.stringValue = "Blu-ray scan failed"
+                    let a = NSAlert(); a.alertStyle = .warning; a.messageText = "Blu-ray could not be scanned"; a.informativeText = error.localizedDescription
+                    if let parent = NSApp.keyWindow ?? NSApp.mainWindow { a.beginSheetModal(for: parent) } else { a.runModal() }
+                }
+            }
+        }
+    }
+
+    private func stageDVD(_ volume: URL, source: String = "disc:0") {
+        guard !scanning, !operationBusy else { return }
+        scanning = true; status.stringValue = "Scanning DVD audio streams with MakeMKV…"
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let titles = try MakeMKVBridge.scanSource(source)
+                let staged = self.opticalTitleRows(volume: volume, titles: titles, mediaLabel: "DVD")
+                DispatchQueue.main.async {
+                    self.rows.removeAll { $0.url.scheme?.lowercased() == "dvd" }
+                    self.rows.append(contentsOf: staged); self.sortRows(); self.table.reloadData(); self.scanning = false
+                    self.updateStatus(); self.status.stringValue = "DVD scanned · \(titles.count) title(s) · \(staged.count) audio stream(s) · review programme before ripping"
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.scanning = false; self.updateStatus(); self.status.stringValue = "DVD scan failed"
+                    let a = NSAlert(); a.alertStyle = .warning; a.messageText = "DVD could not be scanned"; a.informativeText = error.localizedDescription
                     if let parent = NSApp.keyWindow ?? NSApp.mainWindow { a.beginSheetModal(for: parent) } else { a.runModal() }
                 }
             }
@@ -1257,29 +1396,45 @@ final class ImportExportController: NSObject, NSTableViewDataSource, NSTableView
         }
     }
 
-    private func stageISOImages(_ urls: [URL]) {
+    private func stageDiscImages(_ urls: [URL]) {
         guard !scanning else { return }
-        scanning = true; status.stringValue = "Mounting disc image(s) read-only…"; importButton.isEnabled = false
+        scanning = true; status.stringValue = "Mounting ISO / BIN image(s) read-only…"; importButton.isEnabled = false
         DispatchQueue.global(qos: .userInitiated).async {
-            var mounts: [URL] = []
+            var normalMounts: [URL] = []
+            var opticalRows: [ImportStageRow] = []
+            var failures: [String] = []
             for image in urls {
-                let p = Process(); p.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
-                p.arguments = ["attach", "-readonly", "-nobrowse", "-plist", image.path]
-                let out = Pipe(); p.standardOutput = out; p.standardError = Pipe()
-                do { try p.run() } catch { continue }
-                let data = out.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
-                guard p.terminationStatus == 0,
-                      let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
-                      let entities = plist["system-entities"] as? [[String: Any]] else { continue }
-                for entity in entities {
-                    if let dev = entity["dev-entry"] as? String { self.mountedImageDevices.append(dev) }
-                    if let mount = entity["mount-point"] as? String { mounts.append(URL(fileURLWithPath: mount, isDirectory: true)) }
-                }
+                do {
+                    let mounted = try DiscImageSupport.mountReadOnly(image)
+                    self.mountedImageDevices.append(contentsOf: mounted.devices)
+                    for mount in mounted.mounts {
+                        if FileManager.default.fileExists(atPath: mount.appendingPathComponent("BDMV/index.bdmv").path) {
+                            let source = ["iso", "bin"].contains(image.pathExtension.lowercased()) ? "iso:" + image.path : "file:" + mount.path
+                            let titles = try MakeMKVBridge.scanSource(source)
+                            opticalRows.append(contentsOf: self.opticalTitleRows(volume: mount, titles: titles, mediaLabel: "Blu-ray"))
+                        } else if FileManager.default.fileExists(atPath: mount.appendingPathComponent("VIDEO_TS/VIDEO_TS.IFO").path) {
+                            let source = ["iso", "bin"].contains(image.pathExtension.lowercased()) ? "iso:" + image.path : "file:" + mount.path
+                            let titles = try MakeMKVBridge.scanSource(source)
+                            opticalRows.append(contentsOf: self.opticalTitleRows(volume: mount, titles: titles, mediaLabel: "DVD"))
+                        } else {
+                            normalMounts.append(mount)
+                        }
+                    }
+                } catch { failures.append("\(image.lastPathComponent): \(error.localizedDescription)") }
             }
             DispatchQueue.main.async {
                 self.scanning = false
-                if mounts.isEmpty { self.status.stringValue = "Image mounted no scannable filesystem — raw disc extraction will be needed" }
-                else { self.stage(urls: mounts) }
+                if !opticalRows.isEmpty {
+                    self.rows.append(contentsOf: opticalRows); self.sortRows(); self.table.reloadData(); self.updateStatus()
+                }
+                if !normalMounts.isEmpty { self.stage(urls: normalMounts) }
+                else if opticalRows.isEmpty { self.updateStatus() }
+                let ok = urls.count - failures.count
+                self.status.stringValue = failures.isEmpty ? "Disc image scan complete · \(ok) image(s)" : "Disc images · \(ok) opened · \(failures.count) failed"
+                if !failures.isEmpty {
+                    let a = NSAlert(); a.alertStyle = .warning; a.messageText = "Some disc images could not be opened"; a.informativeText = failures.joined(separator: "\n")
+                    if let parent = NSApp.keyWindow ?? NSApp.mainWindow { a.beginSheetModal(for: parent) } else { a.runModal() }
+                }
             }
         }
     }

@@ -20,6 +20,7 @@ done
 swift_sources=(
   "$repo/native/RuntimeSupport.swift"
   "$repo/native/BluRaySupport.swift"
+  "$repo/native/DiscImageSupport.swift"
   "$repo/native/ImportedArtwork.swift"
   "$repo/native/ProviderSettings.swift"
   "$repo/native/LookupService.swift"

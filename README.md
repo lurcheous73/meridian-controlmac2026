@@ -4,6 +4,12 @@ An independent modern macOS controller for owners of Meridian/Sooloos systems.
 ControlMac 2026 is intended to restore day-to-day library control on current Macs
 without relying on the obsolete 32-bit Control:Mac application.
 
+## Download
+
+**[Download ControlMac 2026 v1.0.0 Universal DMG](https://github.com/lurcheous73/meridian-controlmac2026/releases/download/v1.0.0/ControlMac-2026-v1.0.0-Universal.dmg)**
+
+The single Universal 2 installer supports both Apple silicon (`arm64`) and 64-bit Intel (`x86_64`) Macs. Homebrew is not required for normal use.
+
 ## v1.0.0 status
 
 The v1 application is built as **Universal 2**:

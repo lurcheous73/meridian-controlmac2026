@@ -173,7 +173,13 @@ extension ControlMacApp {
                 self.activeImportCancelURL = nil
                 try? FileManager.default.removeItem(at: manifest); try? FileManager.default.removeItem(at: cancelURL)
                 if p.terminationStatus == 0 && text.contains("CORE CONFIRMED BATCH IMPORT COMPLETE") {
-                    self.performStagedGroups(groups, index: index + 1, imported: imported + 1, skipped: skipped)
+                    if let albumID = self.verifiedAlbumID(from: text) {
+                        self.autoArtworkAfterImport(albumID: albumID, group: group) {
+                            self.performStagedGroups(groups, index: index + 1, imported: imported + 1, skipped: skipped)
+                        }
+                    } else {
+                        self.performStagedGroups(groups, index: index + 1, imported: imported + 1, skipped: skipped)
+                    }
                 } else if p.terminationStatus == 3 || text.contains("IMPORT_SKIPPED_DUPLICATE") {
                     self.performStagedGroups(groups, index: index + 1, imported: imported, skipped: skipped + 1)
                 } else if p.terminationStatus == 4 || text.contains("IMPORT_CANCELLED") {

@@ -11,12 +11,16 @@ for arch in arm64 x86_64; do
     [[ -x "$runtime/$arch/bin/$tool" ]] || { echo "Missing $arch runtime tool: $tool" >&2; exit 1; }
   done
   [[ -x "$runtime/$arch/mono/bin/mono-sgen64" ]] || { echo "Missing $arch Mono runtime" >&2; exit 1; }
+  [[ -f "$runtime/$arch/mono/etc/mono/config" ]] || { echo "Missing $arch Mono config" >&2; exit 1; }
+  [[ -f "$runtime/$arch/mono/etc/mono/4.5/machine.config" ]] || { echo "Missing $arch Mono 4.5 machine.config" >&2; exit 1; }
 done
 for tool in ImportOne BatchImportTool LibraryTool PlaybackTool ExportTool; do
   CONTROLMAC_BUILD_ONLY=1 bash "$repo/tools/run-managed.sh" "$tool"
 done
 swift_sources=(
   "$repo/native/RuntimeSupport.swift"
+  "$repo/native/BluRaySupport.swift"
+  "$repo/native/ImportedArtwork.swift"
   "$repo/native/ProviderSettings.swift"
   "$repo/native/LookupService.swift"
   "$repo/native/ExternalProviders.swift"

@@ -70,7 +70,7 @@ final class ImportExportController: NSObject, NSTableViewDataSource, NSTableView
         let addFolders = NSButton(title: "Add Folders…", target: self, action: #selector(addFoldersAction))
         let addFiles = NSButton(title: "Add Files…", target: self, action: #selector(addFilesAction))
         let addISO = NSButton(title: "Add ISO…", target: self, action: #selector(addISOAction))
-        let optical = NSButton(title: "CD / DVD…", target: self, action: #selector(scanOpticalAction))
+        let optical = NSButton(title: "CD / DVD / Blu-ray…", target: self, action: #selector(scanOpticalAction))
         let miniDisc = NSButton(title: "MiniDisc…", target: self, action: #selector(scanMiniDiscAction))
         miniDiscRipButton.target = self; miniDiscRipButton.action = #selector(ripMiniDiscAction); miniDiscRipButton.isEnabled = false
         miniDiscWipeButton.target = self; miniDiscWipeButton.action = #selector(wipeMiniDiscAction); miniDiscWipeButton.isEnabled = true
@@ -306,9 +306,70 @@ final class ImportExportController: NSObject, NSTableViewDataSource, NSTableView
         let roots = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: nil, options: [.skipHiddenVolumes]) ?? []
         if let audioCD = roots.first(where: { FileManager.default.fileExists(atPath: $0.appendingPathComponent(".TOC.plist").path) }) {
             stageAudioCD(audioCD)
+        } else if let bluRay = roots.first(where: { FileManager.default.fileExists(atPath: $0.appendingPathComponent("BDMV/index.bdmv").path) }) {
+            stageBluRay(bluRay)
         } else {
             status.stringValue = "Scanning mounted optical media…"
             scanMountedVolumes(preferOptical: true)
+        }
+    }
+
+    private func stageBluRay(_ volume: URL) {
+        guard !scanning, !operationBusy else { return }
+        scanning = true
+        status.stringValue = "Scanning Blu-ray audio with MakeMKV…"
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let titles = try MakeMKVBridge.scanDisc()
+                var staged: [ImportStageRow] = []
+                for title in titles where !title.audio.isEmpty {
+                    let stereo = BluRayAudioPolicy.preferredStereo(in: title)
+                    let multichannel = BluRayAudioPolicy.preferredMultichannelByLayout(in: title)
+                    let archiveKeys = Set(multichannel.map { "\($0.titleIndex):\($0.streamIndex)" })
+                    for stream in title.audio {
+                        let pseudo = URL(string: "bluray://disc/title/\(title.index)/audio/\(stream.streamIndex)")!
+                        let source = title.source.isEmpty ? "Title \(title.index)" : title.source
+                        let duration = title.duration.isEmpty ? "" : " · \(title.duration)"
+                        let layout: String
+                        if !stream.layoutName.isEmpty { layout = stream.layoutName }
+                        else if stream.isStereo { layout = "Stereo" }
+                        else if stream.channels > 0 { layout = "\(stream.channels)ch" }
+                        else { layout = "Audio" }
+                        let codec = stream.codecLong.isEmpty ? stream.codec : stream.codecLong
+                        let key = "\(stream.titleIndex):\(stream.streamIndex)"
+                        let recommendation: String
+                        if let selected = stereo, selected.streamIndex == stream.streamIndex {
+                            recommendation = "Blu-ray · Default stereo → Sooloos"
+                        } else if archiveKeys.contains(key) {
+                            recommendation = "Blu-ray · Archive \(stream.normalizedLayout) locally"
+                        } else {
+                            recommendation = "Blu-ray · Alternate stream · not selected by default"
+                        }
+                        staged.append(ImportStageRow(
+                            url: pseudo, artist: "", album: volume.lastPathComponent,
+                            title: "\(source)\(duration) · \(layout)", disc: 1, track: title.index + 1,
+                            codec: codec, rate: stream.sampleRate, bits: stream.bits,
+                            channels: stream.channels,
+                            status: recommendation))
+                    }
+                }
+                DispatchQueue.main.async {
+                    self.rows.removeAll { $0.url.scheme?.lowercased() == "bluray" }
+                    self.rows.append(contentsOf: staged)
+                    self.sortRows(); self.table.reloadData(); self.scanning = false
+                    self.updateStatus()
+                    self.status.stringValue = "Blu-ray scanned · \(titles.count) title(s) · \(staged.count) audio stream(s) · review programme before ripping"
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.scanning = false; self.updateStatus()
+                    self.status.stringValue = "Blu-ray scan failed"
+                    let a = NSAlert(); a.alertStyle = .warning
+                    a.messageText = "Blu-ray could not be scanned"
+                    a.informativeText = error.localizedDescription
+                    if let parent = NSApp.keyWindow ?? NSApp.mainWindow { a.beginSheetModal(for: parent) } else { a.runModal() }
+                }
+            }
         }
     }
 

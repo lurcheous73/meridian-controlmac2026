@@ -21,24 +21,24 @@ v1.02b1 is the current working ControlMac 2026 development build. It keeps the p
 - Live Meridian IPNP discovery/communication on modern macOS without relying on the obsolete 2009 Mono multicast socket wrapper
 - ControlFifteen network configuration read: DHCP, current address, static IP, subnet mask, gateway and DNS
 - DHCP/static network editor using Meridian's original C15 `set_dhcp` and `set_static_ip` commands, with IPv4/netmask/subnet validation and a guarded Apply confirmation
+- Network write-and-reconnect cycle physically tested on live hardware, including DHCP/static operation and IP/netmask/gateway/DNS changes
 - Sooloos registration data read from the live Broker using Meridian's original `user_registration` IPNP query
 - Registration editor using Meridian's original `register_user` fields: first name, last name, email, phone, address lines, city, state/county, postcode/ZIP and country
-- Dealer information read/display through the Sooloos broker where the system provides it
+- Registration write and persistence physically tested on live hardware
+- Dealer information read/display through the Sooloos broker where the system provides it; dealer editing is intentionally out of scope
 - Meridian speaker wake/select-SpeakerLink behaviour physically proven by selecting Meridian source index `2` (`LP/Aux/SLS`); the generic `PowerOn` remote key alone did not wake the speakers
 - Multiple playback units/zones can be selected from the Playback Unit control
 - Configuration refreshes are serialized so network and registration IPNP transactions do not compete for the same multicast transport
+- Firmware update and downgrade path physically tested on live Meridian hardware
 
-### Firmware management status
+### Firmware management
 
-ControlMac can inspect the update catalogue already stored on a Sooloos Core and report available system/device versions, including `live`, `live.old`, `staging` and `staging.old` trees when present. On the development reference C15, genuine Meridian upgrade and downgrade packages were found and parsed.
+ControlMac can inspect the update catalogue already stored on a Sooloos Core and report available system/device versions, including `live`, `live.old`, `staging` and `staging.old` trees when present. On the development reference C15, genuine Meridian upgrade and downgrade packages were found and used successfully.
 
-Firmware installation/downgrade is **not enabled yet**. Meridian's original IFTP transfer/update/reboot sequence has been recovered, but ControlMac will not expose a write button until that complete transfer path has been physically validated. Firmware work must be performed with the Core/device on a UPS and power must not be interrupted.
+Firmware update/downgrade is considered a tested advanced maintenance function. It remains inherently risky: users should only use known-correct Meridian firmware for the target device, keep the Core/device on a UPS, and never interrupt power during an update or downgrade. Recovery and manual maintenance may require SSH access.
 
 ### Still in development after v1.02b1
 
-- Physically validate a complete DHCP/static-IP write-and-reconnect cycle before calling network writes fully proven
-- Enable firmware upgrade/downgrade only after real-hardware validation of the complete Meridian IFTP update path
-- Dealer-information editing: read/display exists, but no genuine Meridian write command has yet been identified
 - Fully proven Meridian Surround Core multichannel playback control
 - True DVD-Audio authoring (`AUDIO_TS`) and burnable ISO from a Sooloos album
 - One-click Pure Audio Blu-ray ISO authoring from a Sooloos album

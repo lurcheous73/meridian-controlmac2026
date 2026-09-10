@@ -39,11 +39,10 @@ final class SettingsController: NSWindowController {
     private let scanStatus = NSTextField(labelWithString: "Not scanned yet")
     private let scanResults = NSTextView()
     private let sooloosPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-    private let surroundPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let meridianPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let sooloosAddress = NSTextField(string: "")
-    private let surroundAddress = NSTextField(string: "")
     private let sooloosStatus = NSTextField(labelWithString: "")
-    private let surroundStatus = NSTextField(labelWithString: "")
+    private let meridianStatus = NSTextField(labelWithString: "")
 
     let musicBrainz = NSButton(checkboxWithTitle: "MusicBrainz / Cover Art Archive", target: nil, action: nil)
     let audioDB = NSButton(checkboxWithTitle: "TheAudioDB", target: nil, action: nil)
@@ -58,10 +57,10 @@ final class SettingsController: NSWindowController {
 
     init(configurationChanged: (() -> Void)? = nil) {
         self.configurationChanged = configurationChanged
-        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 650),
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 650),
                          styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         w.title = "ControlMac 2026 Settings"
-        w.minSize = NSSize(width: 700, height: 580)
+        w.minSize = NSSize(width: 720, height: 580)
         super.init(window: w)
         buildUI()
         loadValues()
@@ -76,7 +75,7 @@ final class SettingsController: NSWindowController {
         let s = NSStackView(views: [l, field])
         s.orientation = .horizontal
         s.spacing = 10
-        field.widthAnchor.constraint(greaterThanOrEqualToConstant: 360).isActive = true
+        field.widthAnchor.constraint(greaterThanOrEqualToConstant: 380).isActive = true
         return s
     }
 
@@ -99,19 +98,14 @@ final class SettingsController: NSWindowController {
         ])
 
         let equipment = NSTabViewItem(identifier: "equipment")
-        equipment.label = "Equipment Scan"
+        equipment.label = "Meridian Equipment"
         equipment.view = buildEquipmentView()
         tabs.addTabViewItem(equipment)
 
         let sooloos = NSTabViewItem(identifier: "sooloos")
-        sooloos.label = "Sooloos"
+        sooloos.label = "Sooloos Core"
         sooloos.view = buildSooloosView()
         tabs.addTabViewItem(sooloos)
-
-        let surround = NSTabViewItem(identifier: "surround")
-        surround.label = "SurroundCore"
-        surround.view = buildSurroundView()
-        tabs.addTabViewItem(surround)
 
         let providers = NSTabViewItem(identifier: "providers")
         providers.label = "Metadata"
@@ -136,20 +130,24 @@ final class SettingsController: NSWindowController {
     }
 
     private func buildEquipmentView() -> NSView {
-        let intro = NSTextField(wrappingLabelWithString: "Scan this Mac's local IPv4 networks for Meridian/Sooloos WebClient cores and SurroundCore HTTP APIs. Nothing is selected automatically when multiple matching cores are found.")
+        let intro = NSTextField(wrappingLabelWithString: "Scan the local network for Meridian Sooloos cores and Meridian hardware with web configuration. Select a detected device to open its own configuration page.")
         intro.maximumNumberOfLines = 3
-        intro.widthAnchor.constraint(equalToConstant: 650).isActive = true
+        intro.widthAnchor.constraint(equalToConstant: 670).isActive = true
 
-        let scan = NSButton(title: "Scan Local Network", target: self, action: #selector(scanNetwork))
-        let buttons = NSStackView(views: [scan, scanStatus])
-        buttons.orientation = .horizontal; buttons.spacing = 12; buttons.alignment = .centerY
+        let scan = NSButton(title: "Scan for Meridian Equipment", target: self, action: #selector(scanNetwork))
+        let scanRow = NSStackView(views: [scan, scanStatus])
+        scanRow.orientation = .horizontal; scanRow.spacing = 12; scanRow.alignment = .centerY
 
         sooloosPopup.target = self; sooloosPopup.action = #selector(selectSooloosDiscovery)
-        surroundPopup.target = self; surroundPopup.action = #selector(selectSurroundDiscovery)
         sooloosPopup.addItem(withTitle: "No Sooloos cores discovered")
-        surroundPopup.addItem(withTitle: "No SurroundCore instances discovered")
-        sooloosPopup.widthAnchor.constraint(equalToConstant: 440).isActive = true
-        surroundPopup.widthAnchor.constraint(equalToConstant: 440).isActive = true
+        sooloosPopup.widthAnchor.constraint(equalToConstant: 460).isActive = true
+
+        meridianPopup.target = self; meridianPopup.action = #selector(selectMeridianDevice)
+        meridianPopup.addItem(withTitle: "No Meridian devices discovered")
+        meridianPopup.widthAnchor.constraint(equalToConstant: 460).isActive = true
+
+        let openConfig = NSButton(title: "Open Device Configuration", target: self, action: #selector(openMeridianConfiguration))
+        meridianStatus.textColor = .secondaryLabelColor
 
         scanResults.isEditable = false
         scanResults.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -157,51 +155,33 @@ final class SettingsController: NSWindowController {
         scroll.documentView = scanResults
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder
-        scroll.widthAnchor.constraint(equalToConstant: 650).isActive = true
-        scroll.heightAnchor.constraint(equalToConstant: 250).isActive = true
+        scroll.widthAnchor.constraint(equalToConstant: 670).isActive = true
+        scroll.heightAnchor.constraint(equalToConstant: 235).isActive = true
 
         return paddedStack([
-            section("Equipment discovery"), intro, buttons,
+            section("Meridian equipment discovery"), intro, scanRow,
             row("Sooloos Core", sooloosPopup),
-            row("SurroundCore", surroundPopup),
+            row("Meridian device", meridianPopup),
+            openConfig, meridianStatus,
             section("Detected equipment"), scroll
         ])
     }
 
     private func buildSooloosView() -> NSView {
-        let intro = NSTextField(wrappingLabelWithString: "ControlMac keeps Meridian/Sooloos separate from SurroundCore. Automatic discovery is preferred; manual host/IP entry is an advanced fallback.")
+        let intro = NSTextField(wrappingLabelWithString: "Automatic discovery is preferred. Manual hostname/IP entry remains available for unusual networks or routed installations.")
         intro.maximumNumberOfLines = 3
-        intro.widthAnchor.constraint(equalToConstant: 650).isActive = true
+        intro.widthAnchor.constraint(equalToConstant: 670).isActive = true
         sooloosAddress.placeholderString = "Hostname or IPv4 address"
         let test = NSButton(title: "Test Connection", target: self, action: #selector(testSooloos))
-        let save = NSButton(title: "Save Sooloos Core", target: self, action: #selector(saveSooloos))
+        let save = NSButton(title: "Use This Sooloos Core", target: self, action: #selector(saveSooloos))
         let buttons = NSStackView(views: [save, test])
         buttons.orientation = .horizontal; buttons.spacing = 8
         sooloosStatus.textColor = .secondaryLabelColor
         return paddedStack([
-            section("Meridian / Sooloos"), intro,
+            section("Meridian Sooloos Core"), intro,
             row("Selected Core", sooloosAddress), buttons, sooloosStatus,
-            section("Expected capabilities"),
-            NSTextField(wrappingLabelWithString: "Library, import destination, zones/endpoints and playback remain provided by the existing proven Meridian/Sooloos backend. This page changes how the Core is selected, not the working Meridian protocol implementation.")
-        ])
-    }
-
-    private func buildSurroundView() -> NSView {
-        let intro = NSTextField(wrappingLabelWithString: "SurroundCore is the separate network/audio backend. Its provider credentials stay on the Core; ControlMac stores only the selected Core address here.")
-        intro.maximumNumberOfLines = 3
-        intro.widthAnchor.constraint(equalToConstant: 650).isActive = true
-        surroundAddress.placeholderString = "http://core-host:8080"
-        let test = NSButton(title: "Test API", target: self, action: #selector(testSurroundCore))
-        let save = NSButton(title: "Save SurroundCore", target: self, action: #selector(saveSurroundCore))
-        let setup = NSButton(title: "Open Streaming Setup", target: self, action: #selector(openSurroundSetup))
-        let buttons = NSStackView(views: [save, test, setup])
-        buttons.orientation = .horizontal; buttons.spacing = 8
-        surroundStatus.textColor = .secondaryLabelColor
-        return paddedStack([
-            section("SurroundCore"), intro,
-            row("Core URL", surroundAddress), buttons, surroundStatus,
-            section("ControlMac relationship"),
-            NSTextField(wrappingLabelWithString: "Library/storage/cache/endpoints/ingest/streaming capability status will be populated from the SurroundCore API. Streaming account passwords and API credentials are not copied into ControlMac.")
+            section("ControlMac connection"),
+            NSTextField(wrappingLabelWithString: "The selected Core supplies the library, import destination, playback zones and queues through the existing ControlMac Meridian/Sooloos backend.")
         ])
     }
 
@@ -229,7 +209,6 @@ final class SettingsController: NSWindowController {
     private func loadValues() {
         let d = UserDefaults.standard
         sooloosAddress.stringValue = ControlMacConfiguration.sooloosAddress
-        surroundAddress.stringValue = ControlMacConfiguration.surroundCoreAddress
 
         let mb = d.object(forKey: "metadataMusicBrainzEnabled") == nil || d.bool(forKey: "metadataMusicBrainzEnabled")
         let adb = d.object(forKey: "metadataAudioDBEnabled") == nil || d.bool(forKey: "metadataAudioDBEnabled")
@@ -249,35 +228,49 @@ final class SettingsController: NSWindowController {
         discovery.scan(progress: { [weak self] text in self?.scanStatus.stringValue = text }) { [weak self] services in
             guard let self = self else { return }
             self.discovered = services
-            self.scanStatus.stringValue = services.isEmpty ? "Scan complete — nothing recognised" : "Scan complete — \(services.count) service(s) recognised"
-            self.scanResults.string = services.isEmpty ? "No recognised Sooloos or SurroundCore service responded. Manual entry remains available." : services.map {
-                "\($0.kind.rawValue)\t\($0.name)\t\($0.displayAddress)\t\($0.detail)"
+            self.scanStatus.stringValue = services.isEmpty ? "Scan complete — no Meridian equipment recognised" : "Scan complete — \(services.count) Meridian device(s) recognised"
+            self.scanResults.string = services.isEmpty ? "No recognised Meridian/Sooloos device responded. Manual Core entry remains available." : services.map {
+                "\($0.kind.rawValue)\t\($0.name)\t\($0.host)\t\($0.detail)"
             }.joined(separator: "\n")
             self.reloadDiscoveryPopups()
         }
     }
 
     private func reloadDiscoveryPopups() {
-        let sooloos = discovered.filter { $0.kind == .sooloos }
-        let surround = discovered.filter { $0.kind == .surroundCore }
+        let cores = discovered.filter { $0.kind == .sooloosCore }
+        let devices = discovered.filter { $0.configurationURL != nil }
+
         sooloosPopup.removeAllItems()
-        surroundPopup.removeAllItems()
-        if sooloos.isEmpty { sooloosPopup.addItem(withTitle: "No Sooloos cores discovered") }
-        else { sooloos.forEach { sooloosPopup.addItem(withTitle: "\($0.name) — \($0.displayAddress)") } }
-        if surround.isEmpty { surroundPopup.addItem(withTitle: "No SurroundCore instances discovered") }
-        else { surround.forEach { surroundPopup.addItem(withTitle: "\($0.name) — \($0.displayAddress)") } }
+        if cores.isEmpty { sooloosPopup.addItem(withTitle: "No Sooloos cores discovered") }
+        else { cores.forEach { sooloosPopup.addItem(withTitle: "\($0.name) — \($0.host)") } }
+
+        meridianPopup.removeAllItems()
+        if devices.isEmpty { meridianPopup.addItem(withTitle: "No Meridian devices discovered") }
+        else { devices.forEach { meridianPopup.addItem(withTitle: "\($0.name) — \($0.host)") } }
     }
 
     @objc private func selectSooloosDiscovery() {
-        let matches = discovered.filter { $0.kind == .sooloos }
+        let matches = discovered.filter { $0.kind == .sooloosCore }
         guard matches.indices.contains(sooloosPopup.indexOfSelectedItem) else { return }
-        sooloosAddress.stringValue = matches[sooloosPopup.indexOfSelectedItem].displayAddress
+        sooloosAddress.stringValue = matches[sooloosPopup.indexOfSelectedItem].host
     }
 
-    @objc private func selectSurroundDiscovery() {
-        let matches = discovered.filter { $0.kind == .surroundCore }
-        guard matches.indices.contains(surroundPopup.indexOfSelectedItem) else { return }
-        surroundAddress.stringValue = matches[surroundPopup.indexOfSelectedItem].displayAddress
+    @objc private func selectMeridianDevice() {
+        let matches = discovered.filter { $0.configurationURL != nil }
+        guard matches.indices.contains(meridianPopup.indexOfSelectedItem) else { return }
+        let device = matches[meridianPopup.indexOfSelectedItem]
+        meridianStatus.stringValue = "Selected \(device.name) at \(device.host)"
+    }
+
+    @objc private func openMeridianConfiguration() {
+        let matches = discovered.filter { $0.configurationURL != nil }
+        guard matches.indices.contains(meridianPopup.indexOfSelectedItem),
+              let url = matches[meridianPopup.indexOfSelectedItem].configurationURL else {
+            meridianStatus.stringValue = "Select a detected Meridian device first."
+            return
+        }
+        meridianStatus.stringValue = "Opening \(url.host ?? "Meridian device") configuration…"
+        NSWorkspace.shared.open(url)
     }
 
     @objc private func saveSooloos() {
@@ -286,38 +279,11 @@ final class SettingsController: NSWindowController {
         configurationChanged?()
     }
 
-    @objc private func saveSurroundCore() {
-        ControlMacConfiguration.surroundCoreAddress = surroundAddress.stringValue
-        surroundStatus.stringValue = "SurroundCore saved."
-        configurationChanged?()
-    }
-
     @objc private func testSooloos() {
         sooloosStatus.stringValue = "Testing Sooloos…"
         discovery.testSooloos(sooloosAddress.stringValue) { [weak self] ok, detail in
             self?.sooloosStatus.stringValue = ok ? "Connected — \(detail)" : "Test failed — \(detail)"
         }
-    }
-
-    @objc private func testSurroundCore() {
-        surroundStatus.stringValue = "Testing SurroundCore…"
-        discovery.testSurroundCore(surroundAddress.stringValue) { [weak self] ok, detail in
-            self?.surroundStatus.stringValue = ok ? "Connected — \(detail)" : "Test failed — \(detail)"
-        }
-    }
-
-    @objc private func openSurroundSetup() {
-        var raw = surroundAddress.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { surroundStatus.stringValue = "Set a SurroundCore address first."; return }
-        if !raw.contains("://") { raw = "http://" + raw }
-        guard var parts = URLComponents(string: raw), let host = parts.host, !host.isEmpty else {
-            surroundStatus.stringValue = "Invalid SurroundCore address."; return
-        }
-        if parts.port == nil { parts.port = 8080 }
-        parts.path = "/setup/streaming"
-        parts.query = nil; parts.fragment = nil
-        guard let url = parts.url else { return }
-        NSWorkspace.shared.open(url)
     }
 
     @objc private func saveProviderSettings() {

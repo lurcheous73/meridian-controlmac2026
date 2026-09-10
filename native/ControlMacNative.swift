@@ -130,9 +130,12 @@ final class ControlMacApp: NSObject, NSApplicationDelegate, NSTableViewDataSourc
     }
 
     @objc func showAbout() {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? "unknown"
+        let build = info["CFBundleVersion"] as? String ?? "unknown"
         let a = NSAlert()
         a.messageText = "ControlMac 2026"
-        a.informativeText = "Native Apple-silicon library control for Meridian Sooloos.\n\nAlbum deletion uses a fresh Core re-read and guarded confirmation."
+        a.informativeText = "Version \(version) (build \(build))\n\nNative Meridian Sooloos library control, import/export, disc management and playback.\n\nAlbum deletion uses a fresh Core re-read and guarded confirmation."
         a.runModal()
     }
 
@@ -147,7 +150,7 @@ final class ControlMacApp: NSObject, NSApplicationDelegate, NSTableViewDataSourc
         titleIcon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 20, weight: .semibold)
         let title = NSTextField(labelWithString: "ControlMac 2026")
         title.font = .systemFont(ofSize: 20, weight: .semibold)
-        coreField.placeholderString = "Core address"
+        coreField.placeholderString = "Sooloos Core address"
         coreField.target = self; coreField.action = #selector(connect)
         let connectButton = NSButton(title: "Connect", target: self, action: #selector(connect))
         let refreshButton = NSButton(image: NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh")!, target: self, action: #selector(refreshLibrary))
@@ -470,10 +473,14 @@ final class ControlMacApp: NSObject, NSApplicationDelegate, NSTableViewDataSourc
         let raw = coreField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let candidate = raw.contains("://") ? raw : "http://" + raw
         guard let parts = URLComponents(string: candidate), let h = parts.host, !h.isEmpty else {
-            statusLabel.stringValue = "Enter a valid Core hostname or IP address"; return
+            statusLabel.stringValue = "Enter a valid Sooloos Core hostname or IP address"; return
         }
-        host = h; UserDefaults.standard.set(raw, forKey: "core")
-        loadCachedSnapshot(); refreshPlayback(); refreshLibrary()
+        host = h
+        ControlMacConfiguration.sooloosAddress = raw
+        statusLabel.stringValue = "Connecting to Sooloos Core…"
+        loadCachedSnapshot()
+        refreshPlayback()
+        refreshLibrary()
     }
 
     @objc func refreshLibrary() {

@@ -30,6 +30,6 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Connect to your Meridian Sooloos Core to manage and import music.</string>
+	<string>Discover and connect to Meridian Sooloos and SurroundCore equipment on your local network.</string>
 </dict>
 </plist>

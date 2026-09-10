@@ -25,3 +25,8 @@ node_modules/
 *.bak
 tools/atracdenc-src/
 build/
+
+# Generated app icon assets
+/native/M2026-1024.png
+/native/M2026.icns
+/native/M2026.iconset/

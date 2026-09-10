@@ -2,8 +2,8 @@ import Foundation
 import Darwin
 
 enum ControlMacServiceKind: String {
-    case sooloos = "Sooloos"
-    case surroundCore = "SurroundCore"
+    case sooloosCore = "Sooloos Core"
+    case meridianDevice = "Meridian Device"
 }
 
 struct ControlMacDiscoveredService: Hashable {
@@ -12,21 +12,24 @@ struct ControlMacDiscoveredService: Hashable {
     let host: String
     let port: Int
     let detail: String
+    let configurationPath: String?
 
-    var displayAddress: String {
-        switch kind {
-        case .sooloos:
-            return host
-        case .surroundCore:
-            return "http://\(host):\(port)"
-        }
+    var displayAddress: String { host }
+
+    var configurationURL: URL? {
+        guard let path = configurationPath else { return nil }
+        var parts = URLComponents()
+        parts.scheme = "http"
+        parts.host = host
+        if port != 80 { parts.port = port }
+        parts.path = path
+        return parts.url
     }
 }
 
 enum ControlMacConfiguration {
     private static let defaults = UserDefaults.standard
     static let sooloosKey = "sooloosCore"
-    static let surroundCoreKey = "surroundCore"
 
     static var sooloosAddress: String {
         get {
@@ -36,14 +39,9 @@ enum ControlMacConfiguration {
         set {
             let clean = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
             defaults.set(clean, forKey: sooloosKey)
-            // Keep the old key during the transition so existing code/builds do not regress.
+            // Keep the old key so the existing proven Meridian/Sooloos code continues to work unchanged.
             defaults.set(clean, forKey: "core")
         }
-    }
-
-    static var surroundCoreAddress: String {
-        get { defaults.string(forKey: surroundCoreKey) ?? "" }
-        set { defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: surroundCoreKey) }
     }
 }
 
@@ -67,7 +65,7 @@ final class ControlMacNetworkDiscovery {
                 self.callbackQueue.async { completion([]) }
                 return
             }
-            self.callbackQueue.async { progress("Scanning \(candidates.count) local addresses…") }
+            self.callbackQueue.async { progress("Scanning \(candidates.count) local addresses for Meridian equipment…") }
 
             let group = DispatchGroup()
             let lock = NSLock()
@@ -105,18 +103,6 @@ final class ControlMacNetworkDiscovery {
         }
     }
 
-    func testSurroundCore(_ raw: String, completion: @escaping (Bool, String) -> Void) {
-        guard let target = normalizedSurroundCore(raw) else {
-            completion(false, "Invalid SurroundCore address")
-            return
-        }
-        probeSurroundCore(host: target.host, port: target.port) { service in
-            self.callbackQueue.async {
-                completion(service != nil, service?.detail ?? "No SurroundCore API response")
-            }
-        }
-    }
-
     private func probe(host: String, completion: @escaping ([ControlMacDiscoveredService]) -> Void) {
         let group = DispatchGroup()
         let lock = NSLock()
@@ -129,12 +115,19 @@ final class ControlMacNetworkDiscovery {
         }
 
         group.enter()
-        probeSurroundCore(host: host, port: 8080) { service in
+        probeMeridianWebDevice(host: host) { service in
             if let service = service { lock.lock(); services.append(service); lock.unlock() }
             group.leave()
         }
 
-        group.notify(queue: .global(qos: .utility)) { completion(services) }
+        group.notify(queue: .global(qos: .utility)) {
+            // If the same host is positively identified as a Core, prefer that classification.
+            if services.contains(where: { $0.kind == .sooloosCore }) {
+                completion(services.filter { $0.kind == .sooloosCore })
+            } else {
+                completion(services)
+            }
+        }
     }
 
     private func probeSooloos(host: String, completion: @escaping (ControlMacDiscoveredService?) -> Void) {
@@ -152,35 +145,48 @@ final class ControlMacNetworkDiscovery {
             guard lower.contains("sooloos") || lower.contains("webclient") || lower.contains("gwt") else {
                 completion(nil); return
             }
-            completion(.init(kind: .sooloos,
+            completion(.init(kind: .sooloosCore,
                              name: "Meridian Sooloos Core",
                              host: host,
                              port: http.url?.port ?? 80,
-                             detail: "Sooloos WebClient detected"))
+                             detail: "Sooloos WebClient detected",
+                             configurationPath: "/"))
         }.resume()
     }
 
-    private func probeSurroundCore(host: String, port: Int, completion: @escaping (ControlMacDiscoveredService?) -> Void) {
-        guard let url = URL(string: "http://\(host):\(port)/openapi.json") else { completion(nil); return }
-        session.dataTask(with: url) { data, response, _ in
+    private func probeMeridianWebDevice(host: String, completion: @escaping (ControlMacDiscoveredService?) -> Void) {
+        guard let url = URL(string: "http://\(host)/") else { completion(nil); return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        session.dataTask(with: req) { data, response, _ in
             guard let http = response as? HTTPURLResponse,
-                  (200...299).contains(http.statusCode),
+                  (200...399).contains(http.statusCode),
                   let data = data,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let info = json["info"] as? [String: Any] else {
+                  let text = String(data: data.prefix(131072), encoding: .utf8) else {
                 completion(nil); return
             }
-            let title = (info["title"] as? String) ?? ""
-            let version = (info["version"] as? String) ?? "unknown"
-            guard title.lowercased().contains("surround") || String(data: data, encoding: .utf8)?.lowercased().contains("surroundcore") == true else {
+            let lower = text.lowercased()
+            let headers = http.allHeaderFields.map { "\($0.key):\($0.value)" }.joined(separator: " ").lowercased()
+            guard lower.contains("meridian") || lower.contains("sooloos") || headers.contains("meridian") else {
                 completion(nil); return
             }
-            completion(.init(kind: .surroundCore,
-                             name: title.isEmpty ? "SurroundCore" : title,
+
+            let title = self.htmlTitle(text) ?? "Meridian Device"
+            completion(.init(kind: .meridianDevice,
+                             name: title,
                              host: host,
-                             port: port,
-                             detail: "API version \(version)"))
+                             port: http.url?.port ?? 80,
+                             detail: "Meridian web configuration detected",
+                             configurationPath: "/"))
         }.resume()
+    }
+
+    private func htmlTitle(_ html: String) -> String? {
+        let lower = html.lowercased()
+        guard let a = lower.range(of: "<title>"),
+              let b = lower.range(of: "</title>", range: a.upperBound..<lower.endIndex) else { return nil }
+        let value = String(html[a.upperBound..<b.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
     }
 
     private func normalizedHost(_ raw: String) -> String? {
@@ -189,14 +195,6 @@ final class ControlMacNetworkDiscovery {
         let candidate = trimmed.contains("://") ? trimmed : "http://" + trimmed
         guard let parts = URLComponents(string: candidate), let host = parts.host, !host.isEmpty else { return nil }
         return host
-    }
-
-    private func normalizedSurroundCore(_ raw: String) -> (host: String, port: Int)? {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let candidate = trimmed.contains("://") ? trimmed : "http://" + trimmed
-        guard let parts = URLComponents(string: candidate), let host = parts.host, !host.isEmpty else { return nil }
-        return (host, parts.port ?? 8080)
     }
 
     private func localIPv4Candidates() -> [String] {

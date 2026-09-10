@@ -8,8 +8,8 @@ set -euo pipefail
 controlmac_source_root=$(cd "$(dirname "$0")/.." && pwd)
 controlmac_entry=${1:-}
 case "$controlmac_entry" in
-  BrokerProbe|ConfigTool|ImportPreflight|ImportDraftProbe|ImportOne|BatchImportTool|LibraryTool|PlaybackTool|AlbumInspect|ExportProbe|ExportTool|FlacMetadataTests) ;;
-  *) echo 'Choose BrokerProbe, ImportPreflight, ImportDraftProbe, ImportOne, BatchImportTool, LibraryTool, PlaybackTool, AlbumInspect, ExportProbe, ExportTool or FlacMetadataTests' >&2; exit 2 ;;
+  BrokerProbe|ConfigTool|IPNPConfigTool|ImportPreflight|ImportDraftProbe|ImportOne|BatchImportTool|LibraryTool|PlaybackTool|AlbumInspect|ExportProbe|ExportTool|FlacMetadataTests) ;;
+  *) echo 'Choose a supported ControlMac managed tool' >&2; exit 2 ;;
 esac
 shift
 controlmac_runtime="$CONTROLMAC_MONO_ROOT/bin/mono-sgen64"
@@ -29,6 +29,7 @@ done
   "${controlmac_references[@]}" \
   "$controlmac_source_root/tools/BrokerProbe.cs" \
   "$controlmac_source_root/tools/ConfigTool.cs" \
+  "$controlmac_source_root/tools/IPNPConfigTool.cs" \
   "$controlmac_source_root/tools/ImportPreflight.cs" \
   "$controlmac_source_root/tools/ImportDraftProbe.cs" \
   "$controlmac_source_root/tools/ImportOne.cs" \

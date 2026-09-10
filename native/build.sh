@@ -14,7 +14,7 @@ for arch in arm64 x86_64; do
   [[ -f "$runtime/$arch/mono/etc/mono/config" ]] || { echo "Missing $arch Mono config" >&2; exit 1; }
   [[ -f "$runtime/$arch/mono/etc/mono/4.5/machine.config" ]] || { echo "Missing $arch Mono 4.5 machine.config" >&2; exit 1; }
 done
-for tool in ImportOne BatchImportTool LibraryTool PlaybackTool ConfigTool ExportTool; do
+for tool in ImportOne BatchImportTool LibraryTool PlaybackTool ConfigTool IPNPConfigTool ExportTool; do
   CONTROLMAC_BUILD_ONLY=1 bash "$repo/tools/run-managed.sh" "$tool"
 done
 swift_sources=(
@@ -48,6 +48,9 @@ xcrun swiftc -swift-version 5 -target x86_64-apple-macos13.0 \
   "${swift_sources[@]}" -o "$intel_bin"
 lipo -create "$arm_bin" "$intel_bin" -output "$out/Contents/MacOS/ControlMac2026"
 cp "$repo/native/Info.plist" "$out/Contents/Info.plist"
+commit=$(git -C "$repo" rev-parse --short=7 HEAD 2>/dev/null || printf 'unknown')
+/usr/libexec/PlistBuddy -c "Delete :ControlMacGitCommit" "$out/Contents/Info.plist" >/dev/null 2>&1 || true
+/usr/libexec/PlistBuddy -c "Add :ControlMacGitCommit string $commit" "$out/Contents/Info.plist"
 icon="$repo/native/M2026.icns"
 if [[ ! -f "$icon" ]]; then
   echo "Generating app icon from source..."
@@ -66,7 +69,7 @@ if [[ ! -f "$icon" ]]; then
   iconutil -c icns "$repo/native/M2026.iconset" -o "$icon"
 fi
 cp "$icon" "$out/Contents/Resources/M2026.icns"
-for tool in ImportOne BatchImportTool LibraryTool PlaybackTool ConfigTool ExportTool; do
+for tool in ImportOne BatchImportTool LibraryTool PlaybackTool ConfigTool IPNPConfigTool ExportTool; do
   cp "$repo/build/managed/$tool.exe" "$out/Contents/Resources/$tool.exe"
 done
 cp -R "$repo/tools/netmd" "$out/Contents/Resources/netmd"

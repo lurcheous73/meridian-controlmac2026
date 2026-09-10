@@ -133,9 +133,10 @@ final class ControlMacApp: NSObject, NSApplicationDelegate, NSTableViewDataSourc
         let info = Bundle.main.infoDictionary ?? [:]
         let version = info["CFBundleShortVersionString"] as? String ?? "unknown"
         let build = info["CFBundleVersion"] as? String ?? "unknown"
+        let commit = info["ControlMacGitCommit"] as? String ?? "unknown"
         let a = NSAlert()
         a.messageText = "ControlMac 2026"
-        a.informativeText = "Version \(version) (build \(build))\n\nNative Meridian Sooloos library control, import/export, disc management and playback.\n\nAlbum deletion uses a fresh Core re-read and guarded confirmation."
+        a.informativeText = "Version \(version) (build \(build)) · commit \(commit)\n\nNative Meridian Sooloos library control, import/export, disc management and playback.\n\nAlbum deletion uses a fresh Core re-read and guarded confirmation."
         a.runModal()
     }
 

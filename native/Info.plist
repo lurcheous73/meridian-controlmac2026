@@ -30,6 +30,6 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Discover and connect to Meridian Sooloos and SurroundCore equipment on your local network.</string>
+	<string>Discover and connect to Meridian and Sooloos equipment on your local network.</string>
 </dict>
 </plist>

@@ -14,7 +14,7 @@ for arch in arm64 x86_64; do
   [[ -f "$runtime/$arch/mono/etc/mono/config" ]] || { echo "Missing $arch Mono config" >&2; exit 1; }
   [[ -f "$runtime/$arch/mono/etc/mono/4.5/machine.config" ]] || { echo "Missing $arch Mono 4.5 machine.config" >&2; exit 1; }
 done
-for tool in ImportOne BatchImportTool LibraryTool PlaybackTool ExportTool; do
+for tool in ImportOne BatchImportTool LibraryTool PlaybackTool ConfigTool ExportTool; do
   CONTROLMAC_BUILD_ONLY=1 bash "$repo/tools/run-managed.sh" "$tool"
 done
 swift_sources=(
@@ -28,6 +28,7 @@ swift_sources=(
   "$repo/native/ExternalProviders.swift"
   "$repo/native/BandcampService.swift"
   "$repo/native/SettingsController.swift"
+  "$repo/native/MeridianConfigController.swift"
   "$repo/native/LookupGrid.swift"
   "$repo/native/RevalidationCompare.swift"
   "$repo/native/PlaybackUI.swift"
@@ -65,7 +66,7 @@ if [[ ! -f "$icon" ]]; then
   iconutil -c icns "$repo/native/M2026.iconset" -o "$icon"
 fi
 cp "$icon" "$out/Contents/Resources/M2026.icns"
-for tool in ImportOne BatchImportTool LibraryTool PlaybackTool ExportTool; do
+for tool in ImportOne BatchImportTool LibraryTool PlaybackTool ConfigTool ExportTool; do
   cp "$repo/build/managed/$tool.exe" "$out/Contents/Resources/$tool.exe"
 done
 cp -R "$repo/tools/netmd" "$out/Contents/Resources/netmd"

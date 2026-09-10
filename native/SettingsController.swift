@@ -35,6 +35,7 @@ final class SettingsController: NSWindowController {
 
     private let discovery = ControlMacNetworkDiscovery()
     private var discovered: [ControlMacDiscoveredService] = []
+    private var meridianConfigController: MeridianConfigController?
 
     private let scanStatus = NSTextField(labelWithString: "Not scanned yet")
     private let scanResults = NSTextView()
@@ -130,7 +131,7 @@ final class SettingsController: NSWindowController {
     }
 
     private func buildEquipmentView() -> NSView {
-        let intro = NSTextField(wrappingLabelWithString: "Scan the local network for Meridian Sooloos cores and Meridian hardware with web configuration. Select a detected device to open its own configuration page.")
+        let intro = NSTextField(wrappingLabelWithString: "Scan the local network for Meridian Sooloos cores and Meridian hardware. Device configuration opens natively inside ControlMac; the obsolete browser WebClient is not required.")
         intro.maximumNumberOfLines = 3
         intro.widthAnchor.constraint(equalToConstant: 670).isActive = true
 
@@ -146,7 +147,7 @@ final class SettingsController: NSWindowController {
         meridianPopup.addItem(withTitle: "No Meridian devices discovered")
         meridianPopup.widthAnchor.constraint(equalToConstant: 460).isActive = true
 
-        let openConfig = NSButton(title: "Open Device Configuration", target: self, action: #selector(openMeridianConfiguration))
+        let openConfig = NSButton(title: "Open Native Device Configuration", target: self, action: #selector(openMeridianConfiguration))
         meridianStatus.textColor = .secondaryLabelColor
 
         scanResults.isEditable = false
@@ -263,14 +264,19 @@ final class SettingsController: NSWindowController {
     }
 
     @objc private func openMeridianConfiguration() {
-        let matches = discovered.filter { $0.configurationURL != nil }
-        guard matches.indices.contains(meridianPopup.indexOfSelectedItem),
-              let url = matches[meridianPopup.indexOfSelectedItem].configurationURL else {
-            meridianStatus.stringValue = "Select a detected Meridian device first."
+        let raw = sooloosAddress.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidate = raw.contains("://") ? raw : "http://" + raw
+        guard let parts = URLComponents(string: candidate), let host = parts.host, !host.isEmpty else {
+            meridianStatus.stringValue = "Select or enter a Sooloos Core first."
             return
         }
-        meridianStatus.stringValue = "Opening \(url.host ?? "Meridian device") configuration…"
-        NSWorkspace.shared.open(url)
+        let controller = MeridianConfigController(host: host)
+        meridianConfigController = controller
+        controller.showWindow(nil)
+        controller.window?.center()
+        controller.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        meridianStatus.stringValue = "Opened native Meridian configuration from \(host)."
     }
 
     @objc private func saveSooloos() {

@@ -175,7 +175,7 @@ final class ControlMacApp: NSObject, NSApplicationDelegate, NSTableViewDataSourc
             statusLabel.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 5),
             statusLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16)
         ])
-        let zoneLabel = NSTextField(labelWithString: "Zone")
+        let zoneLabel = NSTextField(labelWithString: "Playback Unit")
         zoneLabel.textColor = .secondaryLabelColor
         zonePopup.target = self; zonePopup.action = #selector(playbackZoneChanged)
         previousButton.target = self; previousButton.action = #selector(playbackPrevious)
@@ -192,7 +192,7 @@ final class ControlMacApp: NSObject, NSApplicationDelegate, NSTableViewDataSourc
         let playbackBar = NSStackView(views: [zoneLabel, zonePopup, previousButton, playPauseButton, nextButton, muteButton, volumeDownButton, volumeValueLabel, volumeUpButton, nowPlayingLabel, queueButton])
         playbackBar.orientation = .horizontal; playbackBar.spacing = 8; playbackBar.alignment = .centerY
         playbackBar.translatesAutoresizingMaskIntoConstraints = false; content.addSubview(playbackBar)
-        zonePopup.widthAnchor.constraint(equalToConstant: 180).isActive = true
+        zonePopup.widthAnchor.constraint(equalToConstant: 230).isActive = true
         nowPlayingLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
         NSLayoutConstraint.activate([
             playbackBar.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor),

@@ -49,7 +49,7 @@ internal static class PlaybackTool {
             Console.WriteLine("CMZONE\t" + z.ZoneId + "\t" + z.Name + "\t" + state + "\t" + z.Volume +
                 "\t" + z.VolumeMin + "\t" + z.VolumeMax + "\t" + z.IsMuted + "\t" + queueCount +
                 "\t" + queueIndex + "\t" + media + "\t" + subtitle);
-            if (z.Status != null && z.Status.AudioDevice != null) Console.WriteLine("CMAUDIO\t" + z.ZoneId + "\t" + z.Status.AudioDevice.PortNumber + "\t" + z.Status.AudioDevice.AudioPlayerInfo + "\t" + z.Status.AudioDevice.DescriptiveName + "\tpaired=" + z.Status.AudioDevice.IsPairedWithUs + "\tpairing=" + z.Status.AudioDevice.Pairing);
+            if (z.Status != null && z.Status.AudioDevice != null) Console.WriteLine("CMAUDIO\t" + z.ZoneId + "\t" + z.Status.AudioDevice.PortNumber + "\t" + z.Status.AudioDevice.AudioPlayerInfo + "\t" + z.Status.AudioDevice.DescriptiveName + "\tpaired=" + z.Status.AudioDevice.IsPairedWithUs);
             if (z.PlayQueue != null && z.PlayQueue.Items != null) {
                 for (int q = 0; q < z.PlayQueue.Items.Count; q++) {
                     var item = z.PlayQueue.Items[q];

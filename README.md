@@ -5,9 +5,47 @@ An independent modern macOS controller for owners of Meridian/Sooloos systems. C
 ## Downloads
 
 - **Stable:** [ControlMac 2026 v1.0.0 Universal DMG](https://github.com/lurcheous73/meridian-controlmac2026/releases/tag/v1.0.0)
-- **Development alpha:** [ControlMac 2026 v1.02a](https://github.com/lurcheous73/meridian-controlmac2026/releases/tag/v1.02a)
+- **Current working development branch:** `feature/equipment-discovery` — ControlMac 2026 v1.02b1
 
 The single Universal 2 application supports Apple silicon (`arm64`) and 64-bit Intel (`x86_64`) Macs. Minimum target: macOS 13. Homebrew is not required for normal use.
+
+## v1.02b1 current working build
+
+v1.02b1 is the current working ControlMac 2026 development build. It keeps the proven Meridian/Sooloos library, import/export, optical-disc and playback functions from earlier builds and adds native equipment/configuration management.
+
+### Proven on real Meridian/Sooloos hardware
+
+- Native Meridian/Sooloos configuration window with live Core and device information
+- Universal 2 build for Apple silicon (`arm64`) and 64-bit Intel (`x86_64`)
+- About box includes the release version, build number and exact short Git commit for traceability
+- Live Meridian IPNP discovery/communication on modern macOS without relying on the obsolete 2009 Mono multicast socket wrapper
+- ControlFifteen network configuration read: DHCP, current address, static IP, subnet mask, gateway and DNS
+- DHCP/static network editor using Meridian's original C15 `set_dhcp` and `set_static_ip` commands, with IPv4/netmask/subnet validation and a guarded Apply confirmation
+- Network write-and-reconnect cycle physically tested on live hardware, including DHCP/static operation and IP/netmask/gateway/DNS changes
+- Sooloos registration data read from the live Broker using Meridian's original `user_registration` IPNP query
+- Registration editor using Meridian's original `register_user` fields: first name, last name, email, phone, address lines, city, state/county, postcode/ZIP and country
+- Registration write and persistence physically tested on live hardware
+- Dealer information read/display through the Sooloos broker where the system provides it; dealer editing is intentionally out of scope
+- Meridian speaker wake/select-SpeakerLink behaviour physically proven by selecting Meridian source index `2` (`LP/Aux/SLS`); the generic `PowerOn` remote key alone did not wake the speakers
+- Multiple playback units/zones can be selected from the Playback Unit control
+- Configuration refreshes are serialized so network and registration IPNP transactions do not compete for the same multicast transport
+- Firmware update and downgrade path physically tested on live Meridian hardware
+
+### Firmware management
+
+ControlMac can inspect the update catalogue already stored on a Sooloos Core and report available system/device versions, including `live`, `live.old`, `staging` and `staging.old` trees when present. On the development reference C15, genuine Meridian upgrade and downgrade packages were found and used successfully.
+
+Firmware update/downgrade is considered a tested advanced maintenance function. It remains inherently risky: users should only use known-correct Meridian firmware for the target device, keep the Core/device on a UPS, and never interrupt power during an update or downgrade. Recovery and manual maintenance may require SSH access.
+
+### Still in development after v1.02b1
+
+- Fully proven Meridian Surround Core multichannel playback control
+- True DVD-Audio authoring (`AUDIO_TS`) and burnable ISO from a Sooloos album
+- One-click Pure Audio Blu-ray ISO authoring from a Sooloos album
+- True DVD-Audio read/import path
+- SACD/DSD support
+- Physical validation on a real Intel Mac remains pending
+
 
 ## v1.0.0 stable
 
@@ -48,16 +86,9 @@ v1.02a extends the optical/image layer while keeping all previous Sooloos functi
 
 A Sooloos → 24/96 LPCM → BDMV → Blu-ray ISO authoring recipe has also been lab-proven with decoded-PCM round-trip equality, but one-click Pure Audio Blu-ray authoring is not yet exposed as a finished v1.02a UI feature.
 
-### Still in development after v1.02a
+### Superseded by v1.02b1
 
-- Automatic Meridian equipment discovery/setup instead of a single remembered Core address
-- Separate Library Core and Surround Core selections, plus discovered endpoints/zones
-- Fully proven Meridian Surround Core multichannel playback control
-- True DVD-Audio authoring (`AUDIO_TS`) and burnable ISO from a Sooloos album
-- One-click Pure Audio Blu-ray ISO authoring from a Sooloos album
-- True DVD-Audio read/import path
-- SACD/DSD support
-- Physical validation on a real Intel Mac remains pending
+The current development status and remaining work are listed in the v1.02b1 section above.
 
 ## Dependencies and packaging
 
